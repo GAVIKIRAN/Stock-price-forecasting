@@ -50,7 +50,7 @@ a {
 .metric-card-ui,
 .form-card,
 .mini-card {
-    background: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(229, 231, 235, 0.85);
     box-shadow: var(--shadow);
@@ -353,27 +353,6 @@ a {
     font-size: 1.6rem;
     font-weight: 700;
     letter-spacing: -0.03em;
-}
-
-.status-badge {
-    display: inline-flex;
-    padding: 6px 10px;
-    border-radius: 999px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    vertical-align: middle;
-}
-
-.status-ok {
-    background: #ecfdf5;
-    color: #047857;
-    border: 1px solid #a7f3d0;
-}
-
-.status-warn {
-    background: #fff7ed;
-    color: #c2410c;
-    border: 1px solid #fed7aa;
 }
 
 /* Tables */

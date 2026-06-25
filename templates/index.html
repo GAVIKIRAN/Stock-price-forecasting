@@ -10,26 +10,27 @@
     <div class="page-shell">
         <div class="hero-card">
             <div class="hero-left">
-                <span class="eyebrow">ARIMA · Forecasting · Interactive Charts</span>
+                <span class="eyebrow">ARIMA · Forecasting · TradingView-style Charts</span>
                 <h1>Stock Price Forecasting Dashboard</h1>
                 <p>
-                    Explore stocks with a TradingView-style candlestick chart, run ARIMA forecasting,
-                    compare benchmark models, and inspect future price projections in a clean dashboard.
+                    Search and analyze stocks with a TradingView-style candlestick chart,
+                    selectable chart timeframes, ARIMA forecasting, benchmark comparison,
+                    and a clean dashboard UI.
                 </p>
 
                 <div class="feature-badges">
                     <span class="badge-soft">Candlestick Chart</span>
+                    <span class="badge-soft">1m / 5m / 1h / 1d / 1wk</span>
                     <span class="badge-soft">ARIMA Forecast</span>
                     <span class="badge-soft">Search + Select Stocks</span>
-                    <span class="badge-soft">Benchmark Comparison</span>
                 </div>
             </div>
 
             <div class="hero-right">
-                <form action="/forecast" method="POST" class="form-card" id="forecastForm">
+                <form action="/forecast" method="POST" class="form-card">
                     <div class="form-header">
                         <h2>Run Forecast</h2>
-                        <p>Select a stock or search by company name / ticker.</p>
+                        <p>Select a stock, choose a chart timeframe, and generate forecast insights.</p>
                     </div>
 
                     {% if error %}
@@ -62,6 +63,15 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="timeframe">Chart timeframe</label>
+                        <select id="timeframe" name="timeframe">
+                            {% for tf in timeframes %}
+                            <option value="{{ tf }}" {% if tf == selected_timeframe %}selected{% endif %}>{{ tf }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
                         <label for="forecast_days">Forecast days</label>
                         <input
                             type="number"
@@ -79,7 +89,7 @@
                     </button>
 
                     <div class="helper-text">
-                        Tip: Search can match ticker or company name. If you select from the dropdown, that selection will be used directly.
+                        Note: timeframe changes the candlestick chart data. Forecasting still uses daily historical close data for model stability.
                     </div>
                 </form>
             </div>
@@ -106,7 +116,6 @@
 
     <script>
         const searchInput = document.getElementById("stock_search");
-        const stockGrid = document.getElementById("stockGrid");
         const stockChips = Array.from(document.querySelectorAll(".stock-chip"));
 
         searchInput.addEventListener("input", function () {

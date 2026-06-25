@@ -49,6 +49,22 @@ STOCK_OPTIONS = [
     {"symbol": "LT.NS", "name": "Larsen & Toubro"},
 ]
 
+# -------------------------
+# Timeframe config for chart
+# Forecast stays daily for ARIMA stability
+# -------------------------
+TIMEFRAME_CONFIG = {
+    "1m": {"interval": "1m", "period": "7d"},
+    "5m": {"interval": "5m", "period": "60d"},
+    "15m": {"interval": "15m", "period": "60d"},
+    "30m": {"interval": "30m", "period": "60d"},
+    "1h": {"interval": "60m", "period": "60d"},
+    "1d": {"interval": "1d", "period": "5y"},
+    "1wk": {"interval": "1wk", "period": "5y"},
+}
+
+DEFAULT_TIMEFRAME = "1d"
+
 
 # -------------------------
 # Utility functions
@@ -102,9 +118,130 @@ def find_best_arima_order(train):
     return best_order, best_aic
 
 
-def build_candlestick_chart(df, symbol):
+def resolve_symbol(form_symbol, form_search):
     """
-    TradingView-style candlestick chart with MA50 + MA200
+    Use dropdown symbol if selected; otherwise try search text.
+    """
+    if form_symbol and form_symbol.strip():
+        return form_symbol.strip().upper()
+
+    if not form_search:
+        return "AAPL"
+
+    query = form_search.strip().lower()
+
+    # exact symbol match
+    for stock in STOCK_OPTIONS:
+        if stock["symbol"].lower() == query:
+            return stock["symbol"]
+
+    # exact company name match
+    for stock in STOCK_OPTIONS:
+        if stock["name"].lower() == query:
+            return stock["symbol"]
+
+    # partial match
+    for stock in STOCK_OPTIONS:
+        if query in stock["symbol"].lower() or query in stock["name"].lower():
+            return stock["symbol"]
+
+    return form_search.strip().upper()
+
+
+def flatten_yf_columns(df):
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df
+
+
+def prepare_chart_data(symbol, timeframe):
+    """
+    Download chart data according to selected timeframe.
+    """
+    cfg = TIMEFRAME_CONFIG.get(timeframe, TIMEFRAME_CONFIG[DEFAULT_TIMEFRAME])
+    raw = yf.download(
+        symbol,
+        period=cfg["period"],
+        interval=cfg["interval"],
+        auto_adjust=False,
+        progress=False
+    )
+
+    if raw.empty:
+        return None
+
+    raw = flatten_yf_columns(raw)
+
+    required_cols = ["Open", "High", "Low", "Close"]
+    for col in required_cols:
+        if col not in raw.columns:
+            return None
+
+    if "Volume" not in raw.columns:
+        raw["Volume"] = 0
+
+    df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
+
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
+    df.index = pd.to_datetime(df.index)
+
+    # Moving averages for chart
+    df["MA50"] = df["Close"].rolling(50).mean()
+    df["MA200"] = df["Close"].rolling(200).mean()
+
+    return df
+
+
+def prepare_forecast_data(symbol):
+    """
+    Daily data for ARIMA forecasting
+    """
+    raw = yf.download(
+        symbol,
+        period="5y",
+        interval="1d",
+        auto_adjust=False,
+        progress=False
+    )
+
+    if raw.empty:
+        return None
+
+    raw = flatten_yf_columns(raw)
+
+    required_cols = ["Open", "High", "Low", "Close"]
+    for col in required_cols:
+        if col not in raw.columns:
+            return None
+
+    if "Volume" not in raw.columns:
+        raw["Volume"] = 0
+
+    df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
+
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
+
+    df.index = pd.to_datetime(df.index)
+    df = df.asfreq("B")
+
+    df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].ffill()
+    df["Volume"] = df["Volume"].fillna(0)
+
+    df["MA50"] = df["Close"].rolling(50).mean()
+    df["MA200"] = df["Close"].rolling(200).mean()
+
+    return df
+
+
+def build_candlestick_chart(df, symbol, timeframe):
+    """
+    TradingView-style candlestick chart with timeframe label
     """
     fig = go.Figure()
 
@@ -140,11 +277,11 @@ def build_candlestick_chart(df, symbol):
     )
 
     fig.update_layout(
-        title=f"{symbol} Price Chart",
+        title=f"{symbol} Price Chart ({timeframe})",
         template="plotly_white",
-        xaxis_title="Date",
+        xaxis_title="Date / Time",
         yaxis_title="Price",
-        height=620,
+        height=650,
         xaxis_rangeslider_visible=True,
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -157,9 +294,6 @@ def build_candlestick_chart(df, symbol):
 
 
 def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days):
-    """
-    Forecast chart: historical close + future forecast + confidence interval
-    """
     fig = go.Figure()
 
     fig.add_trace(
@@ -208,7 +342,7 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
     )
 
     fig.update_layout(
-        title=f"{symbol} Forecast Chart",
+        title=f"{symbol} Daily Forecast Chart",
         template="plotly_white",
         xaxis_title="Date",
         yaxis_title="Price",
@@ -223,44 +357,17 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
     return fig.to_html(full_html=False, include_plotlyjs=False)
 
 
-def resolve_symbol(form_symbol, form_search):
-    """
-    Use dropdown symbol if selected; otherwise try search text.
-    Search supports ticker or company name.
-    """
-    if form_symbol and form_symbol.strip():
-        return form_symbol.strip().upper()
-
-    if not form_search:
-        return "AAPL"
-
-    query = form_search.strip().lower()
-
-    # exact symbol match
-    for stock in STOCK_OPTIONS:
-        if stock["symbol"].lower() == query:
-            return stock["symbol"]
-
-    # exact company name match
-    for stock in STOCK_OPTIONS:
-        if stock["name"].lower() == query:
-            return stock["symbol"]
-
-    # partial match
-    for stock in STOCK_OPTIONS:
-        if query in stock["symbol"].lower() or query in stock["name"].lower():
-            return stock["symbol"]
-
-    # fallback: allow user-entered ticker
-    return form_search.strip().upper()
-
-
 # -------------------------
 # Routes
 # -------------------------
 @app.route("/", methods=["GET"])
 def home():
-    return render_template("index.html", stock_options=STOCK_OPTIONS)
+    return render_template(
+        "index.html",
+        stock_options=STOCK_OPTIONS,
+        timeframes=list(TIMEFRAME_CONFIG.keys()),
+        selected_timeframe=DEFAULT_TIMEFRAME
+    )
 
 
 @app.route("/forecast", methods=["POST"])
@@ -269,63 +376,43 @@ def forecast():
         selected_symbol = request.form.get("symbol", "")
         search_text = request.form.get("stock_search", "")
         forecast_days = int(request.form.get("forecast_days", 30))
+        timeframe = request.form.get("timeframe", DEFAULT_TIMEFRAME)
+
+        if timeframe not in TIMEFRAME_CONFIG:
+            timeframe = DEFAULT_TIMEFRAME
 
         symbol = resolve_symbol(selected_symbol, search_text)
 
         # -------------------------
-        # Download stock data
+        # Chart data based on selected timeframe
         # -------------------------
-        raw = yf.download(symbol, period="5y", auto_adjust=False)
-
-        if raw.empty:
+        chart_df = prepare_chart_data(symbol, timeframe)
+        if chart_df is None or chart_df.empty:
             return render_template(
                 "index.html",
                 stock_options=STOCK_OPTIONS,
-                error=f"No data found for {symbol}. Try another stock symbol."
+                timeframes=list(TIMEFRAME_CONFIG.keys()),
+                selected_timeframe=timeframe,
+                error=f"No chart data found for {symbol} with timeframe {timeframe}."
             )
 
-        # Flatten MultiIndex columns if yfinance returns them
-        if isinstance(raw.columns, pd.MultiIndex):
-            raw.columns = raw.columns.get_level_values(0)
-
-        required_cols = ["Open", "High", "Low", "Close"]
-        for col in required_cols:
-            if col not in raw.columns:
-                return render_template(
-                    "index.html",
-                    stock_options=STOCK_OPTIONS,
-                    error=f"Downloaded data for {symbol} is missing required column: {col}"
-                )
-
-        if "Volume" not in raw.columns:
-            raw["Volume"] = 0
-
-        # Keep OHLCV for charting + Close for modeling
-        df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
-
-        # Convert everything to numeric
-        for col in ["Open", "High", "Low", "Close", "Volume"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        # Drop rows where OHLC are missing
-        df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
-
-        # Datetime index + business frequency
-        df.index = pd.to_datetime(df.index)
-        df = df.asfreq("B")
-
-        # Forward fill price columns for business-day continuity
-        df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].ffill()
-        df["Volume"] = df["Volume"].fillna(0)
-
-        # Moving averages
-        df["MA50"] = df["Close"].rolling(50).mean()
-        df["MA200"] = df["Close"].rolling(200).mean()
+        # -------------------------
+        # Forecast data (always daily)
+        # -------------------------
+        forecast_df = prepare_forecast_data(symbol)
+        if forecast_df is None or forecast_df.empty:
+            return render_template(
+                "index.html",
+                stock_options=STOCK_OPTIONS,
+                timeframes=list(TIMEFRAME_CONFIG.keys()),
+                selected_timeframe=timeframe,
+                error=f"No forecast data found for {symbol}."
+            )
 
         # -------------------------
         # Train / Test split
         # -------------------------
-        close_series = df["Close"].copy()
+        close_series = forecast_df["Close"].copy()
         train_size = int(len(close_series) * 0.8)
         train = close_series[:train_size]
         test = close_series[train_size:]
@@ -372,7 +459,7 @@ def forecast():
 
         future_ci = future_forecast.conf_int()
 
-        last_date = df.index[-1]
+        last_date = forecast_df.index[-1]
         future_index = pd.bdate_range(
             start=last_date + pd.Timedelta(days=1),
             periods=forecast_days
@@ -409,27 +496,26 @@ def forecast():
 
         # -------------------------
         # Summary cards
+        # Use chart timeframe data for current displayed market numbers
         # -------------------------
-        latest_close = round(float(df["Close"].dropna().iloc[-1]), 2)
-        latest_open = round(float(df["Open"].dropna().iloc[-1]), 2)
-        latest_high = round(float(df["High"].dropna().iloc[-1]), 2)
-        latest_low = round(float(df["Low"].dropna().iloc[-1]), 2)
+        latest_close = round(float(chart_df["Close"].dropna().iloc[-1]), 2)
+        latest_open = round(float(chart_df["Open"].dropna().iloc[-1]), 2)
+        latest_high = round(float(chart_df["High"].dropna().iloc[-1]), 2)
+        latest_low = round(float(chart_df["Low"].dropna().iloc[-1]), 2)
 
         # -------------------------
         # Charts
         # -------------------------
-        candlestick_chart = build_candlestick_chart(df, symbol)
+        candlestick_chart = build_candlestick_chart(chart_df, symbol, timeframe)
         forecast_chart = build_forecast_chart(
-            df["Close"], future_mean, future_ci, symbol, forecast_days
+            forecast_df["Close"], future_mean, future_ci, symbol, forecast_days
         )
 
-        # -------------------------
-        # Results dictionary
-        # -------------------------
         results = {
             "symbol": symbol,
+            "timeframe": timeframe,
             "forecast_days": forecast_days,
-            "rows": len(df),
+            "rows": len(forecast_df),
             "latest_close": latest_close,
             "latest_open": latest_open,
             "latest_high": latest_high,
@@ -449,20 +535,20 @@ def forecast():
             "candlestick_chart": candlestick_chart,
             "forecast_chart": forecast_chart,
         }
-        print("RESULTS KEYS:", results.keys())
-        print("SYMBOL:", results["symbol"])
-        print("FORECAST TABLE LENGTH:", len(results["forecast_table"]))
 
         return render_template(
             "result.html",
             results=results,
-            stock_options=STOCK_OPTIONS
+            stock_options=STOCK_OPTIONS,
+            timeframes=list(TIMEFRAME_CONFIG.keys())
         )
 
     except Exception as e:
         return render_template(
             "index.html",
             stock_options=STOCK_OPTIONS,
+            timeframes=list(TIMEFRAME_CONFIG.keys()),
+            selected_timeframe=DEFAULT_TIMEFRAME,
             error=str(e)
         )
 

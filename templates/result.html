@@ -13,7 +13,7 @@
                 <span class="eyebrow">Forecast Dashboard</span>
                 <h1>{{ results.symbol }} Stock Forecast</h1>
                 <p class="topbar-subtitle">
-                    Interactive candlestick chart, ARIMA forecast, and benchmark comparison.
+                    Interactive chart timeframe: <strong>{{ results.timeframe }}</strong> · Forecast horizon: <strong>{{ results.forecast_days }} days</strong>
                 </p>
             </div>
             <div class="topbar-actions">
@@ -44,35 +44,21 @@
                 <span class="metric-value">{{ results.best_order }}</span>
             </div>
             <div class="metric-card-ui">
-                <span class="metric-label">Forecast Days</span>
-                <span class="metric-value">{{ results.forecast_days }}</span>
+                <span class="metric-label">Chart Timeframe</span>
+                <span class="metric-value">{{ results.timeframe }}</span>
             </div>
         </section>
 
-        <!-- Debug panel so we can verify result data is actually present -->
+        <!-- Chart timeframe quick note -->
         <section class="panel">
             <div class="panel-head">
                 <div>
-                    <h2>Debug / Quick Summary</h2>
-                    <p>If you can see this section, result.html is loading correctly.</p>
-                </div>
-            </div>
-            <div class="mini-grid">
-                <div class="mini-card">
-                    <h3>Symbol</h3>
-                    <p>{{ results.symbol }}</p>
-                </div>
-                <div class="mini-card">
-                    <h3>Rows Loaded</h3>
-                    <p>{{ results.rows }}</p>
-                </div>
-                <div class="mini-card">
-                    <h3>ARIMA RMSE</h3>
-                    <p>{{ results.arima_rmse }}</p>
-                </div>
-                <div class="mini-card">
-                    <h3>SARIMA AIC</h3>
-                    <p>{{ results.sarima_aic }}</p>
+                    <h2>Chart Timeframe Info</h2>
+                    <p>
+                        The candlestick chart below is shown using the selected timeframe:
+                        <strong>{{ results.timeframe }}</strong>.
+                        The ARIMA forecast still uses daily historical data.
+                    </p>
                 </div>
             </div>
         </section>
