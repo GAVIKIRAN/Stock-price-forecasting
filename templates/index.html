@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Forecasting Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="light-body">
+    <div class="page-shell">
+        <div class="hero-card">
+            <div class="hero-left">
+                <span class="eyebrow">ARIMA · Forecasting · Interactive Charts</span>
+                <h1>Stock Price Forecasting Dashboard</h1>
+                <p>
+                    Explore stocks with a TradingView-style candlestick chart, run ARIMA forecasting,
+                    compare benchmark models, and inspect future price projections in a clean dashboard.
+                </p>
+
+                <div class="feature-badges">
+                    <span class="badge-soft">Candlestick Chart</span>
+                    <span class="badge-soft">ARIMA Forecast</span>
+                    <span class="badge-soft">Search + Select Stocks</span>
+                    <span class="badge-soft">Benchmark Comparison</span>
+                </div>
+            </div>
+
+            <div class="hero-right">
+                <form action="/forecast" method="POST" class="form-card" id="forecastForm">
+                    <div class="form-header">
+                        <h2>Run Forecast</h2>
+                        <p>Select a stock or search by company name / ticker.</p>
+                    </div>
+
+                    {% if error %}
+                    <div class="error-box">
+                        {{ error }}
+                    </div>
+                    {% endif %}
+
+                    <div class="form-group">
+                        <label for="stock_search">Search stock</label>
+                        <input
+                            type="text"
+                            id="stock_search"
+                            name="stock_search"
+                            placeholder="Search Apple, Tesla, Reliance, AAPL..."
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="symbol">Choose from stock list</label>
+                        <select id="symbol" name="symbol">
+                            <option value="">-- Select a stock --</option>
+                            {% for stock in stock_options %}
+                            <option value="{{ stock.symbol }}">
+                                {{ stock.symbol }} — {{ stock.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="forecast_days">Forecast days</label>
+                        <input
+                            type="number"
+                            id="forecast_days"
+                            name="forecast_days"
+                            min="5"
+                            max="120"
+                            value="30"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="primary-btn">
+                        Generate Forecast
+                    </button>
+
+                    <div class="helper-text">
+                        Tip: Search can match ticker or company name. If you select from the dropdown, that selection will be used directly.
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="stock-list-card">
+            <div class="section-head">
+                <div>
+                    <h3>Available stocks</h3>
+                    <p>Quick stock references available in the dashboard.</p>
+                </div>
+            </div>
+
+            <div class="stock-grid" id="stockGrid">
+                {% for stock in stock_options %}
+                <div class="stock-chip" data-search="{{ stock.symbol }} {{ stock.name }}">
+                    <div class="stock-chip-symbol">{{ stock.symbol }}</div>
+                    <div class="stock-chip-name">{{ stock.name }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const searchInput = document.getElementById("stock_search");
+        const stockGrid = document.getElementById("stockGrid");
+        const stockChips = Array.from(document.querySelectorAll(".stock-chip"));
+
+        searchInput.addEventListener("input", function () {
+            const q = this.value.trim().toLowerCase();
+            stockChips.forEach(chip => {
+                const text = chip.dataset.search.toLowerCase();
+                chip.style.display = text.includes(q) ? "flex" : "none";
+            });
+        });
+    </script>
+</body>
+</html>

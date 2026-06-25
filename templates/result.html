@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ results.symbol }} Forecast Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="light-body">
+    <div class="dashboard-shell">
+        <header class="topbar">
+            <div>
+                <span class="eyebrow">Forecast Dashboard</span>
+                <h1>{{ results.symbol }} Stock Forecast</h1>
+                <p class="topbar-subtitle">
+                    Interactive candlestick chart, ARIMA forecast, and benchmark comparison.
+                </p>
+            </div>
+            <div class="topbar-actions">
+                <a href="/" class="secondary-btn">← Back</a>
+            </div>
+        </header>
+
+        <!-- Summary cards -->
+        <section class="card-grid six-grid">
+            <div class="metric-card-ui">
+                <span class="metric-label">Latest Close</span>
+                <span class="metric-value">{{ results.latest_close }}</span>
+            </div>
+            <div class="metric-card-ui">
+                <span class="metric-label">Open</span>
+                <span class="metric-value">{{ results.latest_open }}</span>
+            </div>
+            <div class="metric-card-ui">
+                <span class="metric-label">High</span>
+                <span class="metric-value">{{ results.latest_high }}</span>
+            </div>
+            <div class="metric-card-ui">
+                <span class="metric-label">Low</span>
+                <span class="metric-value">{{ results.latest_low }}</span>
+            </div>
+            <div class="metric-card-ui">
+                <span class="metric-label">Best ARIMA Order</span>
+                <span class="metric-value">{{ results.best_order }}</span>
+            </div>
+            <div class="metric-card-ui">
+                <span class="metric-label">Forecast Days</span>
+                <span class="metric-value">{{ results.forecast_days }}</span>
+            </div>
+        </section>
+
+        <!-- Debug panel so we can verify result data is actually present -->
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Debug / Quick Summary</h2>
+                    <p>If you can see this section, result.html is loading correctly.</p>
+                </div>
+            </div>
+            <div class="mini-grid">
+                <div class="mini-card">
+                    <h3>Symbol</h3>
+                    <p>{{ results.symbol }}</p>
+                </div>
+                <div class="mini-card">
+                    <h3>Rows Loaded</h3>
+                    <p>{{ results.rows }}</p>
+                </div>
+                <div class="mini-card">
+                    <h3>ARIMA RMSE</h3>
+                    <p>{{ results.arima_rmse }}</p>
+                </div>
+                <div class="mini-card">
+                    <h3>SARIMA AIC</h3>
+                    <p>{{ results.sarima_aic }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Candlestick chart -->
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Price Chart</h2>
+                    <p>TradingView-style candlestick chart with moving averages.</p>
+                </div>
+            </div>
+            <div class="plot-wrap">
+                {{ results.candlestick_chart | safe }}
+            </div>
+        </section>
+
+        <!-- Forecast chart -->
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Forecast Chart</h2>
+                    <p>Historical close, ARIMA forecast, and confidence interval.</p>
+                </div>
+            </div>
+            <div class="plot-wrap">
+                {{ results.forecast_chart | safe }}
+            </div>
+        </section>
+
+        <!-- Stationarity + model quality -->
+        <section class="two-col-grid">
+            <div class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Stationarity Test</h2>
+                        <p>ADF results for original and differenced series.</p>
+                    </div>
+                </div>
+
+                <div class="mini-grid">
+                    <div class="mini-card">
+                        <h3>Original Series</h3>
+                        <p><strong>ADF:</strong> {{ results.adf_original.adf_stat }}</p>
+                        <p><strong>p-value:</strong> {{ results.adf_original.p_value }}</p>
+                        <p><strong>Stationary:</strong> {{ results.adf_original.stationary }}</p>
+                    </div>
+
+                    <div class="mini-card">
+                        <h3>Differenced Series</h3>
+                        <p><strong>ADF:</strong> {{ results.adf_diff.adf_stat }}</p>
+                        <p><strong>p-value:</strong> {{ results.adf_diff.p_value }}</p>
+                        <p><strong>Stationary:</strong> {{ results.adf_diff.stationary }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Model Quality</h2>
+                        <p>ARIMA and SARIMA fit information.</p>
+                    </div>
+                </div>
+
+                <div class="mini-grid">
+                    <div class="mini-card">
+                        <h3>ARIMA AIC</h3>
+                        <div class="big-number">{{ results.best_aic }}</div>
+                    </div>
+                    <div class="mini-card">
+                        <h3>SARIMA AIC</h3>
+                        <div class="big-number">{{ results.sarima_aic }}</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Benchmark table -->
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Benchmark Comparison</h2>
+                    <p>ARIMA vs Naive vs Rolling Mean</p>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>RMSE</th>
+                            <th>MAE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>ARIMA</td>
+                            <td>{{ results.arima_rmse }}</td>
+                            <td>{{ results.arima_mae }}</td>
+                        </tr>
+                        <tr>
+                            <td>Naive Forecast</td>
+                            <td>{{ results.naive_rmse }}</td>
+                            <td>{{ results.naive_mae }}</td>
+                        </tr>
+                        <tr>
+                            <td>Rolling Mean</td>
+                            <td>{{ results.rolling_rmse }}</td>
+                            <td>{{ results.rolling_mae }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Forecast table -->
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>{{ results.forecast_days }}-Day Forecast Table</h2>
+                    <p>Projected values with lower and upper confidence intervals.</p>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Forecast</th>
+                            <th>Lower CI</th>
+                            <th>Upper CI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in results.forecast_table %}
+                        <tr>
+                            <td>{{ row["Date"] }}</td>
+                            <td>{{ row["Forecast"] }}</td>
+                            <td>{{ row["Lower CI"] }}</td>
+                            <td>{{ row["Upper CI"] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</body>
+</html>
