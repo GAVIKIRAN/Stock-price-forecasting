@@ -13,7 +13,7 @@
                 <span class="eyebrow">Forecast Dashboard</span>
                 <h1>{{ results.symbol }} Stock Forecast</h1>
                 <p class="topbar-subtitle">
-                    Interactive chart timeframe: <strong>{{ results.timeframe }}</strong> · Forecast horizon: <strong>{{ results.forecast_days }} days</strong>
+                    Chart timeframe: <strong>{{ results.timeframe }}</strong> · Forecast horizon: <strong>{{ results.forecast_days }} days</strong>
                 </p>
             </div>
             <div class="topbar-actions">
@@ -49,29 +49,34 @@
             </div>
         </section>
 
-        <!-- Chart timeframe quick note -->
-        <section class="panel">
-            <div class="panel-head">
-                <div>
-                    <h2>Chart Timeframe Info</h2>
-                    <p>
-                        The candlestick chart below is shown using the selected timeframe:
-                        <strong>{{ results.timeframe }}</strong>.
-                        The ARIMA forecast still uses daily historical data.
-                    </p>
-                </div>
+        <!-- TradingView style chart toolbar strip -->
+        <section class="tv-strip">
+            <div class="tv-strip-left">
+                <div class="tv-badge">{{ results.symbol }}</div>
+                <div class="tv-muted">Timeframe: {{ results.timeframe }}</div>
+                <div class="tv-muted">Scroll to zoom · Drag to pan</div>
+            </div>
+            <div class="tv-strip-right">
+                <span class="tv-chip">Candles</span>
+                <span class="tv-chip">Volume</span>
+                <span class="tv-chip">MA20</span>
+                <span class="tv-chip">MA50</span>
+                <span class="tv-chip">MA200</span>
             </div>
         </section>
 
         <!-- Candlestick chart -->
-        <section class="panel">
+        <section class="panel panel-chart">
             <div class="panel-head">
                 <div>
-                    <h2>Price Chart</h2>
-                    <p>TradingView-style candlestick chart with moving averages.</p>
+                    <h2>TradingView-style Price Chart</h2>
+                    <p>
+                        Use mouse wheel to zoom, drag to pan, and hover for crosshair values.
+                        The chart includes candlesticks, moving averages, and volume bars.
+                    </p>
                 </div>
             </div>
-            <div class="plot-wrap">
+            <div class="plot-wrap tv-chart-wrap">
                 {{ results.candlestick_chart | safe }}
             </div>
         </section>
@@ -81,7 +86,7 @@
             <div class="panel-head">
                 <div>
                     <h2>Forecast Chart</h2>
-                    <p>Historical close, ARIMA forecast, and confidence interval.</p>
+                    <p>Daily ARIMA forecast using historical close prices.</p>
                 </div>
             </div>
             <div class="plot-wrap">

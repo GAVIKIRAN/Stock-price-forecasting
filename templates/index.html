@@ -13,16 +13,15 @@
                 <span class="eyebrow">ARIMA · Forecasting · TradingView-style Charts</span>
                 <h1>Stock Price Forecasting Dashboard</h1>
                 <p>
-                    Search and analyze stocks with a TradingView-style candlestick chart,
-                    selectable chart timeframes, ARIMA forecasting, benchmark comparison,
-                    and a clean dashboard UI.
+                    Analyze stocks with a TradingView-style candlestick chart, volume bars,
+                    interactive zoom/pan, timeframe buttons, ARIMA forecasting, and benchmark comparison.
                 </p>
 
                 <div class="feature-badges">
-                    <span class="badge-soft">Candlestick Chart</span>
+                    <span class="badge-soft">Candlestick + Volume</span>
                     <span class="badge-soft">1m / 5m / 1h / 1d / 1wk</span>
+                    <span class="badge-soft">Mouse Scroll Zoom</span>
                     <span class="badge-soft">ARIMA Forecast</span>
-                    <span class="badge-soft">Search + Select Stocks</span>
                 </div>
             </div>
 
@@ -30,7 +29,7 @@
                 <form action="/forecast" method="POST" class="form-card">
                     <div class="form-header">
                         <h2>Run Forecast</h2>
-                        <p>Select a stock, choose a chart timeframe, and generate forecast insights.</p>
+                        <p>Select a stock, pick a timeframe, and generate the dashboard.</p>
                     </div>
 
                     {% if error %}
@@ -63,12 +62,15 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="timeframe">Chart timeframe</label>
-                        <select id="timeframe" name="timeframe">
+                        <label>Chart timeframe</label>
+                        <div class="timeframe-row">
                             {% for tf in timeframes %}
-                            <option value="{{ tf }}" {% if tf == selected_timeframe %}selected{% endif %}>{{ tf }}</option>
+                            <label class="tf-pill">
+                                <input type="radio" name="timeframe" value="{{ tf }}" {% if tf == selected_timeframe %}checked{% endif %}>
+                                <span>{{ tf }}</span>
+                            </label>
                             {% endfor %}
-                        </select>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -89,7 +91,7 @@
                     </button>
 
                     <div class="helper-text">
-                        Note: timeframe changes the candlestick chart data. Forecasting still uses daily historical close data for model stability.
+                        Timeframe changes the chart data. Forecasting still uses daily historical prices for ARIMA stability.
                     </div>
                 </form>
             </div>

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from statsmodels.tools.sm_exceptions import ValueWarning, ConvergenceWarning
 from statsmodels.tsa.stattools import adfuller
@@ -50,8 +51,7 @@ STOCK_OPTIONS = [
 ]
 
 # -------------------------
-# Timeframe config for chart
-# Forecast stays daily for ARIMA stability
+# Timeframe config
 # -------------------------
 TIMEFRAME_CONFIG = {
     "1m": {"interval": "1m", "period": "7d"},
@@ -62,7 +62,7 @@ TIMEFRAME_CONFIG = {
     "1d": {"interval": "1d", "period": "5y"},
     "1wk": {"interval": "1wk", "period": "5y"},
 }
-
+TIMEFRAME_ORDER = ["1m", "5m", "15m", "30m", "1h", "1d", "1wk"]
 DEFAULT_TIMEFRAME = "1d"
 
 
@@ -88,9 +88,6 @@ def evaluate_forecast(actual, predicted):
 
 
 def find_best_arima_order(train):
-    """
-    Manual ARIMA order selection using AIC
-    """
     best_aic = float("inf")
     best_order = None
 
@@ -119,9 +116,6 @@ def find_best_arima_order(train):
 
 
 def resolve_symbol(form_symbol, form_search):
-    """
-    Use dropdown symbol if selected; otherwise try search text.
-    """
     if form_symbol and form_symbol.strip():
         return form_symbol.strip().upper()
 
@@ -130,17 +124,14 @@ def resolve_symbol(form_symbol, form_search):
 
     query = form_search.strip().lower()
 
-    # exact symbol match
     for stock in STOCK_OPTIONS:
         if stock["symbol"].lower() == query:
             return stock["symbol"]
 
-    # exact company name match
     for stock in STOCK_OPTIONS:
         if stock["name"].lower() == query:
             return stock["symbol"]
 
-    # partial match
     for stock in STOCK_OPTIONS:
         if query in stock["symbol"].lower() or query in stock["name"].lower():
             return stock["symbol"]
@@ -155,10 +146,8 @@ def flatten_yf_columns(df):
 
 
 def prepare_chart_data(symbol, timeframe):
-    """
-    Download chart data according to selected timeframe.
-    """
     cfg = TIMEFRAME_CONFIG.get(timeframe, TIMEFRAME_CONFIG[DEFAULT_TIMEFRAME])
+
     raw = yf.download(
         symbol,
         period=cfg["period"],
@@ -188,7 +177,7 @@ def prepare_chart_data(symbol, timeframe):
     df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
     df.index = pd.to_datetime(df.index)
 
-    # Moving averages for chart
+    df["MA20"] = df["Close"].rolling(20).mean()
     df["MA50"] = df["Close"].rolling(50).mean()
     df["MA200"] = df["Close"].rolling(200).mean()
 
@@ -196,9 +185,6 @@ def prepare_chart_data(symbol, timeframe):
 
 
 def prepare_forecast_data(symbol):
-    """
-    Daily data for ARIMA forecasting
-    """
     raw = yf.download(
         symbol,
         period="5y",
@@ -226,10 +212,10 @@ def prepare_forecast_data(symbol):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
-
     df.index = pd.to_datetime(df.index)
-    df = df.asfreq("B")
 
+    # Business day continuity for ARIMA
+    df = df.asfreq("B")
     df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].ffill()
     df["Volume"] = df["Volume"].fillna(0)
 
@@ -239,12 +225,27 @@ def prepare_forecast_data(symbol):
     return df
 
 
-def build_candlestick_chart(df, symbol, timeframe):
+def build_tradingview_like_chart(df, symbol, timeframe):
     """
-    TradingView-style candlestick chart with timeframe label
+    TradingView-style chart:
+    - Candlestick
+    - Volume bars
+    - MA20 / MA50 / MA200
+    - scroll zoom / pan / crosshair spikes
     """
-    fig = go.Figure()
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.78, 0.22]
+    )
 
+    # Candle colors
+    increasing = df["Close"] >= df["Open"]
+    vol_colors = np.where(increasing, "#089981", "#f23645")
+
+    # Candlestick
     fig.add_trace(
         go.Candlestick(
             x=df.index,
@@ -252,8 +253,27 @@ def build_candlestick_chart(df, symbol, timeframe):
             high=df["High"],
             low=df["Low"],
             close=df["Close"],
-            name="Candlestick"
-        )
+            name="Price",
+            increasing_line_color="#089981",
+            decreasing_line_color="#f23645",
+            increasing_fillcolor="#089981",
+            decreasing_fillcolor="#f23645"
+        ),
+        row=1,
+        col=1
+    )
+
+    # Moving averages
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["MA20"],
+            mode="lines",
+            name="MA20",
+            line=dict(color="#2962FF", width=1.8)
+        ),
+        row=1,
+        col=1
     )
 
     fig.add_trace(
@@ -262,8 +282,10 @@ def build_candlestick_chart(df, symbol, timeframe):
             y=df["MA50"],
             mode="lines",
             name="MA50",
-            line=dict(width=2)
-        )
+            line=dict(color="#FF9800", width=1.8)
+        ),
+        row=1,
+        col=1
     )
 
     fig.add_trace(
@@ -272,25 +294,107 @@ def build_candlestick_chart(df, symbol, timeframe):
             y=df["MA200"],
             mode="lines",
             name="MA200",
-            line=dict(width=2)
-        )
+            line=dict(color="#7E57C2", width=1.8)
+        ),
+        row=1,
+        col=1
+    )
+
+    # Volume
+    fig.add_trace(
+        go.Bar(
+            x=df.index,
+            y=df["Volume"],
+            name="Volume",
+            marker_color=vol_colors,
+            opacity=0.85
+        ),
+        row=2,
+        col=1
     )
 
     fig.update_layout(
-        title=f"{symbol} Price Chart ({timeframe})",
         template="plotly_white",
-        xaxis_title="Date / Time",
-        yaxis_title="Price",
-        height=650,
-        xaxis_rangeslider_visible=True,
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=860,
+        margin=dict(l=20, r=20, t=30, b=20),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        dragmode="pan",
+        hovermode="x unified",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0.0,
+            bgcolor="rgba(255,255,255,0.7)"
+        ),
     )
 
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)")
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)")
+    # Top chart axis
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.06)",
+        rangeslider_visible=False,
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        spikecolor="#94a3b8",
+        spikethickness=1,
+        row=1,
+        col=1
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.06)",
+        fixedrange=False,
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        spikecolor="#94a3b8",
+        spikethickness=1,
+        row=1,
+        col=1
+    )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    # Volume axis
+    fig.update_xaxes(
+        showgrid=False,
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        spikecolor="#94a3b8",
+        spikethickness=1,
+        row=2,
+        col=1
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.04)",
+        fixedrange=False,
+        row=2,
+        col=1
+    )
+
+    # Remove axis titles for cleaner TV look
+    fig.update_xaxes(title_text="")
+    fig.update_yaxes(title_text="")
+
+    config = {
+        "scrollZoom": True,      # mouse wheel zoom
+        "displayModeBar": True,
+        "displaylogo": False,
+        "responsive": True,
+        "doubleClick": "reset",
+        "modeBarButtonsToRemove": [
+            "lasso2d",
+            "select2d",
+            "autoScale2d",
+            "toggleSpikelines"
+        ]
+    }
+
+    return fig.to_html(full_html=False, include_plotlyjs="cdn", config=config)
 
 
 def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days):
@@ -302,7 +406,7 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
             y=df_close.values,
             mode="lines",
             name="Historical Close",
-            line=dict(width=2)
+            line=dict(color="#2563eb", width=2)
         )
     )
 
@@ -312,7 +416,7 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
             y=future_mean.values,
             mode="lines",
             name=f"{forecast_days}-Day Forecast",
-            line=dict(width=3)
+            line=dict(color="#ef4444", width=3)
         )
     )
 
@@ -328,7 +432,7 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
         )
     )
 
-    # lower band with fill
+    # lower band fill
     fig.add_trace(
         go.Scatter(
             x=future_ci.index,
@@ -337,24 +441,32 @@ def build_forecast_chart(df_close, future_mean, future_ci, symbol, forecast_days
             line=dict(width=0),
             fill="tonexty",
             name="Confidence Interval",
-            hoverinfo="skip"
+            hoverinfo="skip",
+            fillcolor="rgba(239,68,68,0.14)"
         )
     )
 
     fig.update_layout(
-        title=f"{symbol} Daily Forecast Chart",
         template="plotly_white",
-        xaxis_title="Date",
-        yaxis_title="Price",
         height=520,
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=20, r=20, t=30, b=20),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        hovermode="x unified",
+        legend=dict(orientation="h", y=1.02, x=0.0),
     )
 
     fig.update_xaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)")
     fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)")
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    config = {
+        "scrollZoom": True,
+        "displayModeBar": True,
+        "displaylogo": False,
+        "responsive": True
+    }
+
+    return fig.to_html(full_html=False, include_plotlyjs=False, config=config)
 
 
 # -------------------------
@@ -365,7 +477,7 @@ def home():
     return render_template(
         "index.html",
         stock_options=STOCK_OPTIONS,
-        timeframes=list(TIMEFRAME_CONFIG.keys()),
+        timeframes=TIMEFRAME_ORDER,
         selected_timeframe=DEFAULT_TIMEFRAME
     )
 
@@ -391,7 +503,7 @@ def forecast():
             return render_template(
                 "index.html",
                 stock_options=STOCK_OPTIONS,
-                timeframes=list(TIMEFRAME_CONFIG.keys()),
+                timeframes=TIMEFRAME_ORDER,
                 selected_timeframe=timeframe,
                 error=f"No chart data found for {symbol} with timeframe {timeframe}."
             )
@@ -404,7 +516,7 @@ def forecast():
             return render_template(
                 "index.html",
                 stock_options=STOCK_OPTIONS,
-                timeframes=list(TIMEFRAME_CONFIG.keys()),
+                timeframes=TIMEFRAME_ORDER,
                 selected_timeframe=timeframe,
                 error=f"No forecast data found for {symbol}."
             )
@@ -417,14 +529,10 @@ def forecast():
         train = close_series[:train_size]
         test = close_series[train_size:]
 
-        # ADF tests
         adf_original = adf_test(train)
         train_diff = train.diff().dropna()
         adf_diff = adf_test(train_diff)
 
-        # -------------------------
-        # ARIMA
-        # -------------------------
         best_order, best_aic = find_best_arima_order(train)
 
         arima_model = ARIMA(
@@ -435,7 +543,7 @@ def forecast():
         )
         arima_result = arima_model.fit()
 
-        # Forecast test period
+        # Test forecast
         test_forecast = arima_result.get_forecast(steps=len(test))
         forecast_mean = pd.Series(test_forecast.predicted_mean, index=test.index)
 
@@ -451,12 +559,9 @@ def forecast():
         naive_rmse, naive_mae = evaluate_forecast(test, naive_forecast)
         rolling_rmse, rolling_mae = evaluate_forecast(test, rolling_mean_forecast)
 
-        # -------------------------
-        # Future Forecast
-        # -------------------------
+        # Future forecast
         future_forecast = arima_result.get_forecast(steps=forecast_days)
         future_mean = pd.Series(future_forecast.predicted_mean)
-
         future_ci = future_forecast.conf_int()
 
         last_date = forecast_df.index[-1]
@@ -464,13 +569,10 @@ def forecast():
             start=last_date + pd.Timedelta(days=1),
             periods=forecast_days
         )
-
         future_mean.index = future_index
         future_ci.index = future_index
 
-        # -------------------------
         # SARIMA comparison
-        # -------------------------
         try:
             sarima_model = SARIMAX(
                 train,
@@ -484,9 +586,6 @@ def forecast():
         except Exception:
             sarima_aic = "Not Available"
 
-        # -------------------------
-        # Forecast table
-        # -------------------------
         forecast_table = pd.DataFrame({
             "Date": future_mean.index.strftime("%Y-%m-%d"),
             "Forecast": np.round(future_mean.values, 2),
@@ -494,19 +593,13 @@ def forecast():
             "Upper CI": np.round(future_ci.iloc[:, 1].values, 2)
         })
 
-        # -------------------------
-        # Summary cards
-        # Use chart timeframe data for current displayed market numbers
-        # -------------------------
         latest_close = round(float(chart_df["Close"].dropna().iloc[-1]), 2)
         latest_open = round(float(chart_df["Open"].dropna().iloc[-1]), 2)
         latest_high = round(float(chart_df["High"].dropna().iloc[-1]), 2)
         latest_low = round(float(chart_df["Low"].dropna().iloc[-1]), 2)
 
-        # -------------------------
         # Charts
-        # -------------------------
-        candlestick_chart = build_candlestick_chart(chart_df, symbol, timeframe)
+        candlestick_chart = build_tradingview_like_chart(chart_df, symbol, timeframe)
         forecast_chart = build_forecast_chart(
             forecast_df["Close"], future_mean, future_ci, symbol, forecast_days
         )
@@ -540,14 +633,14 @@ def forecast():
             "result.html",
             results=results,
             stock_options=STOCK_OPTIONS,
-            timeframes=list(TIMEFRAME_CONFIG.keys())
+            timeframes=TIMEFRAME_ORDER
         )
 
     except Exception as e:
         return render_template(
             "index.html",
             stock_options=STOCK_OPTIONS,
-            timeframes=list(TIMEFRAME_CONFIG.keys()),
+            timeframes=TIMEFRAME_ORDER,
             selected_timeframe=DEFAULT_TIMEFRAME,
             error=str(e)
         )
